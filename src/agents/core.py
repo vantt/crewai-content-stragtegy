@@ -5,7 +5,10 @@ from datetime import datetime
 from crewai import Agent, Task
 from loguru import logger
 
-from .types import AgentRole, AgentType, TaskResult
+from .types import (
+    AgentRole, AgentType, TaskResult, ActionStatus,
+    TaskStatus, Result, MetricsData
+)
 from .models import AgentConfig, AgentState, MemoryConfig, MetricsConfig, TaskConfig
 from .memory import AgentMemory
 from .metrics import AgentMetrics
@@ -103,9 +106,9 @@ class BaseAgent:
             result = await self.task_manager.execute_task(task, self.crew_agent)
             
             # Log successful execution to metrics
-            self.metrics.log_action(
+            metrics_result = self.metrics.log_action(
                 action_name=task.description,
-                status="success",
+                status=ActionStatus.SUCCESS.value,
                 start_time=result['start_time'],
                 duration=result['duration'],
                 result=result['result']
@@ -115,15 +118,17 @@ class BaseAgent:
             self.state.add_action({
                 'action': task.description,
                 'timestamp': result['start_time'],
-                'status': 'success',
+                'status': ActionStatus.SUCCESS.value,
                 'duration': result['duration'],
                 'result': result['result']
             })
             
             # Update memory with result
-            self.memory.add_memory({
-                'task': task.description,
-                'result': result,
+            memory_result = self.memory.add_memory({
+                'content': {
+                    'task': task.description,
+                    'result': result
+                },
                 'timestamp': result['end_time']
             })
             
@@ -140,9 +145,9 @@ class BaseAgent:
                 error_duration = error_result['duration']
             
             # Log failed execution to metrics
-            self.metrics.log_action(
+            metrics_result = self.metrics.log_action(
                 action_name=task.description,
-                status="failed",
+                status=ActionStatus.FAILED.value,
                 start_time=error_time,
                 duration=error_duration,
                 error=str(e)
@@ -152,7 +157,7 @@ class BaseAgent:
             self.state.add_action({
                 'action': task.description,
                 'timestamp': error_time,
-                'status': 'failed',
+                'status': ActionStatus.FAILED.value,
                 'duration': error_duration,
                 'error': str(e)
             })
@@ -177,7 +182,7 @@ class BaseAgent:
         metrics_record.pop('duration', None)
         
         # Log to metrics
-        self.metrics.log_action(
+        metrics_result = self.metrics.log_action(
             action_name=action_name,
             status=status,
             start_time=start_time,
@@ -185,9 +190,12 @@ class BaseAgent:
             **metrics_record
         )
     
-    def analyze_performance(self) -> TaskResult:
+    def analyze_performance(self) -> MetricsData:
         """Analyze agent's performance metrics."""
-        return self.metrics.analyze_performance()
+        result = self.metrics.analyze_performance()
+        if result.success:
+            return result.value
+        raise ValueError(result.error or "Failed to analyze performance")
     
     async def cleanup(self) -> None:
         """Cleanup agent resources."""
