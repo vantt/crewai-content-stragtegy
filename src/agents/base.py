@@ -1,18 +1,18 @@
 """Base agent implementation."""
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 import asyncio
 from datetime import datetime
 from loguru import logger
-from crewai import Task
+from crewai import Task, Agent as CrewAgent
 
 from .core import BaseAgent
 from .memory import AgentMemory
 from .metrics import AgentMetrics
 from .task import TaskManager
-from .models import AgentConfig
+from .models import AgentConfig, MemoryConfig
 
 class Agent(BaseAgent):
-    """Complete agent implementation with all functionality."""
+    """Base agent implementation with core functionality."""
     
     def __init__(
         self,
@@ -24,13 +24,23 @@ class Agent(BaseAgent):
         
         Args:
             config: Agent configuration settings
-            knowledge_base: Reference to shared knowledge base
+            knowledge_base: Reference to knowledge base
             name: Optional human-readable name
         """
         super().__init__(config, knowledge_base, name)
         
-        # Initialize components
-        self.memory = AgentMemory(memory_size=config.memory_size)
+        # Initialize CrewAI agent
+        self.crew_agent = CrewAgent(
+            role=config.role.value,
+            goal=f"Develop effective {config.role.value} strategies",
+            backstory=f"Expert {config.role.value} strategist with years of experience",
+            allow_delegation=False,
+            verbose=True
+        )
+        
+        # Initialize components with proper configuration
+        memory_config = MemoryConfig(memory_size=config.memory_size)
+        self.memory = AgentMemory(config=memory_config)
         self.metrics = AgentMetrics()
         self.task_manager = TaskManager(
             max_rpm=config.max_rpm,
@@ -78,54 +88,39 @@ class Agent(BaseAgent):
         
         return context
     
+    def _extract_context_data(self, context_item: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract data from context item, handling both nested and direct data.
+        
+        Args:
+            context_item: Context item to extract data from
+            
+        Returns:
+            Extracted data
+        """
+        data = context_item.get('data', {})
+        if isinstance(data, dict):
+            # Handle both direct and nested market data
+            if "market_data" in data:
+                return data["market_data"]
+            return data
+        return {}
+    
     async def execute(self, task: Task) -> Dict[str, Any]:
         """Execute a task directly using CrewAI.
         
-        This method is called by CrewAI and should not be called directly.
-        Use execute_task instead.
+        This method should be overridden by specific agent implementations
+        to provide their own mock data and handle their specific data structures.
         
         Args:
             task: The Task to execute
             
         Returns:
             Dict containing task results
+            
+        Raises:
+            NotImplementedError: If not overridden by subclass
         """
-        start_time = datetime.now()
-        try:
-            # Get relevant context from memory
-            context = self.memory.get_relevant_memory(task.description)
-            
-            # Add memory context to task context if available
-            if context:
-                task_context = task.context or []
-                task_context.append({
-                    "description": "Memory context",
-                    "expected_output": "Historical information",
-                    "memory": context
-                })
-                task.context = task_context
-            
-            # Use knowledge base and role-specific logic to process task
-            result = {
-                "status": "success",
-                "result": f"Processed task: {task.description}",
-                "confidence": 0.9
-            }
-            
-            duration = (datetime.now() - start_time).total_seconds()
-            self._update_performance_metrics("execute", duration, True)
-            return result
-            
-        except Exception as e:
-            logger.error(f"Task execution failed: {str(e)}")
-            duration = (datetime.now() - start_time).total_seconds()
-            self._update_performance_metrics("execute", duration, False)
-            return {
-                "status": "error",
-                "error": str(e),
-                "result": None,
-                "confidence": 0.0
-            }
+        raise NotImplementedError("Subclasses must implement execute()")
     
     async def execute_task(self, task: Task) -> Dict[str, Any]:
         """Execute a task and update memory/metrics.
@@ -145,13 +140,15 @@ class Agent(BaseAgent):
                 context=self._create_task_context(task.description, task.context)
             )
             
-            # Execute task
-            result = await self.task_manager.execute_task(task_with_context, self)
+            # Execute task directly instead of using task manager
+            result = await self.execute(task_with_context)
             
             # Update memory with result
             self.memory.add_memory({
-                'task': task.description,
-                'result': result,
+                'content': {
+                    'task': task.description,
+                    'result': result,
+                }
             })
             
             duration = (datetime.now() - start_time).total_seconds()
