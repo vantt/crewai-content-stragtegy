@@ -1,251 +1,265 @@
-"""Integration tests for agent interactions."""
+"""Integration tests for agent component interactions."""
 import pytest
-from typing import Any, Dict, List
 import asyncio
 from datetime import datetime
+from unittest.mock import Mock, patch
+from crewai import Task
 
-from src.agents.models import AgentConfig
-from src.agents.strategy import StrategyAgent
-from src.agents.marketing import MarketingAgent
+from src.agents.core import BaseAgent
+from src.agents.models import AgentConfig, MemoryConfig, MetricsConfig, TaskConfig
 from src.agents.types import AgentRole, AgentType
 
 @pytest.fixture
-def mock_knowledge_base() -> Any:
-    """Create a mock knowledge base for testing."""
-    class MockKnowledgeBase:
-        def __init__(self):
-            self.data = {}
-        
-        def add_knowledge_item(self, item: Dict[str, Any]) -> bool:
-            self.data[item["id"]] = item
-            return True
-        
-        def get_knowledge_item(self, item_id: str) -> Dict[str, Any]:
-            return self.data.get(item_id, {})
-        
-        def search_knowledge(self, query: str) -> List[Dict[str, Any]]:
-            return [item for item in self.data.values() 
-                   if query.lower() in str(item).lower()]
-    
-    return MockKnowledgeBase()
+def mock_knowledge_base():
+    """Mock knowledge base."""
+    return Mock()
 
 @pytest.fixture
-def strategy_config():
+def agent_config():
+    """Test agent configuration."""
     return AgentConfig(
         role=AgentRole.STRATEGY,
         agent_type=AgentType.PRIMARY,
         temperature=0.7,
+        max_iterations=3,
         max_rpm=10,
+        timeout=120,
+        context_window=4000,
         memory_size=5
     )
 
 @pytest.fixture
-def marketing_config():
-    return AgentConfig(
-        role=AgentRole.MARKETING,
-        agent_type=AgentType.PRIMARY,
-        temperature=0.7,
-        max_rpm=10,
-        memory_size=5
+def memory_config():
+    """Test memory configuration."""
+    return MemoryConfig(
+        memory_size=5,
+        relevance_threshold=0.5,
+        max_context_length=1000,
+        ttl_seconds=3600
     )
 
-@pytest.mark.asyncio
-async def test_strategy_marketing_workflow(
-    mock_knowledge_base: Any,
-    strategy_config: AgentConfig,
-    marketing_config: AgentConfig
-):
-    """Test complete workflow between strategy and marketing agents."""
-    # Create agents with config
-    strategy_agent = StrategyAgent(strategy_config, mock_knowledge_base)
-    marketing_agent = MarketingAgent(marketing_config, mock_knowledge_base)
+@pytest.fixture
+def metrics_config():
+    """Test metrics configuration."""
+    return MetricsConfig(
+        enabled=True,
+        history_size=5,
+        aggregation_interval=60,
+        performance_threshold=0.8
+    )
+
+@pytest.fixture
+def task_config():
+    """Test task configuration."""
+    return TaskConfig(
+        max_rpm=10,
+        timeout=120,
+        retry_attempts=3,
+        retry_delay=1.0,
+        batch_size=5
+    )
+
+class MockCrewAgent:
+    """Mock CrewAI agent that allows setting execute method."""
+    def __init__(self, role, goal, backstory, allow_delegation=False, verbose=True):
+        self.role = role
+        self.goal = goal
+        self.backstory = backstory
+        self.allow_delegation = allow_delegation
+        self.verbose = verbose
+        self._execute = None
     
-    try:
-        # Test data
-        market_data = {
-            "market_size": 1000000,
-            "growth_rate": 0.15,
-            "competitors": ["CompA", "CompB"],
-            "target_audience": "Young professionals",
-            "budget": 50000
-        }
-        
-        # Execute strategy analysis
-        strategy_result = await strategy_agent.analyze_market(market_data)
-        
-        # Verify strategy analysis
-        assert isinstance(strategy_result, dict)
-        assert strategy_result["status"] == "success"
-        
-        # Check strategy agent metrics
-        strategy_metrics = strategy_agent.analyze_performance()
-        assert strategy_metrics['total_actions'] > 0
-        assert strategy_metrics['success_rate'] > 0
-        
-        # Create marketing campaign based on strategy
-        campaign = await marketing_agent.create_campaign(strategy_result)
-        
-        # Verify campaign creation
-        assert isinstance(campaign, dict)
-        assert campaign["status"] == "success"
-        
-        # Check marketing agent metrics
-        marketing_metrics = marketing_agent.analyze_performance()
-        assert marketing_metrics['total_actions'] > 0
-        assert marketing_metrics['success_rate'] > 0
-        
-        # Verify memory updates
-        strategy_memory = strategy_agent.memory.get_relevant_memory("market analysis")
-        marketing_memory = marketing_agent.memory.get_relevant_memory("campaign")
-        
-        assert len(strategy_memory) > 0
-        assert len(marketing_memory) > 0
+    async def execute(self, task):
+        if self._execute:
+            return await self._execute(task)
+        return {"result": "Success"}
     
-    finally:
-        # Cleanup
-        await strategy_agent.cleanup()
-        await marketing_agent.cleanup()
+    def set_execute(self, func):
+        self._execute = func
+
+@pytest.fixture
+def test_agent(agent_config, memory_config, metrics_config, task_config, mock_knowledge_base):
+    """Create test agent with all components configured."""
+    with patch('src.agents.core.Agent', MockCrewAgent):
+        agent = BaseAgent(agent_config, mock_knowledge_base)
+        agent.memory.config = memory_config
+        agent.metrics.config = metrics_config
+        agent.task_manager.config = task_config
+        return agent
 
 @pytest.mark.asyncio
-async def test_concurrent_agent_operations(
-    mock_knowledge_base: Any,
-    strategy_config: AgentConfig,
-    marketing_config: AgentConfig
-):
-    """Test concurrent operations between multiple agents."""
-    # Create agents with config
-    strategy_agent = StrategyAgent(strategy_config, mock_knowledge_base)
-    marketing_agent = MarketingAgent(marketing_config, mock_knowledge_base)
+async def test_task_execution_with_memory_context(test_agent):
+    """Test task execution using relevant memory context."""
+    # Add some memories that should be relevant to the task
+    test_agent.memory.add_memory({
+        'content': 'Previous marketing strategy focused on social media',
+        'context': 'strategy planning',
+        'timestamp': datetime.now()
+    })
     
-    try:
-        # Create multiple market analysis tasks
-        markets = [
-            {"market_size": 1000000, "growth_rate": 0.15, "region": "North"},
-            {"market_size": 800000, "growth_rate": 0.12, "region": "South"},
-            {"market_size": 1200000, "growth_rate": 0.18, "region": "East"}
-        ]
-        
-        # Execute market analyses concurrently
-        analysis_tasks = [
-            strategy_agent.analyze_market(market) for market in markets
-        ]
-        analysis_results = await asyncio.gather(*analysis_tasks)
-        
-        # Verify all analyses completed
-        assert len(analysis_results) == len(markets)
-        assert all(result["status"] == "success" for result in analysis_results)
-        
-        # Create campaigns concurrently
-        campaign_tasks = [
-            marketing_agent.create_campaign(analysis) for analysis in analysis_results
-        ]
-        campaign_results = await asyncio.gather(*campaign_tasks)
-        
-        # Verify all campaigns completed
-        assert len(campaign_results) == len(markets)
-        assert all(result["status"] == "success" for result in campaign_results)
-        
-        # Check rate limiting metrics
-        strategy_metrics = strategy_agent.analyze_performance()
-        marketing_metrics = marketing_agent.analyze_performance()
-        
-        assert strategy_metrics['total_actions'] >= len(markets)
-        assert marketing_metrics['total_actions'] >= len(markets)
+    # Create a task
+    task = Task(
+        description="Develop new marketing strategy",
+        expected_output="Marketing strategy document"
+    )
     
-    finally:
-        # Cleanup
-        await strategy_agent.cleanup()
-        await marketing_agent.cleanup()
+    # Execute task
+    result = await test_agent.execute_task(task)
+    
+    # Verify task execution was recorded in metrics
+    assert test_agent.metrics.latest_metrics['total_actions'] == 1
+    assert test_agent.metrics.latest_metrics['success_rate'] == 1.0
+    
+    # Verify new memory was created from result
+    memories = test_agent.memory.get_relevant_memory("marketing strategy")
+    assert any("Previous marketing strategy" in str(m.get('content')) for m in memories)
 
 @pytest.mark.asyncio
-async def test_error_handling_and_recovery(
-    mock_knowledge_base: Any,
-    strategy_config: AgentConfig,
-    marketing_config: AgentConfig
-):
-    """Test error handling and recovery in agent interactions."""
-    # Create agents with config
-    strategy_agent = StrategyAgent(strategy_config, mock_knowledge_base)
-    marketing_agent = MarketingAgent(marketing_config, mock_knowledge_base)
+async def test_performance_monitoring_integration(test_agent):
+    """Test integration of performance monitoring across components."""
+    task = Task(
+        description="Test task",
+        expected_output="Test output"
+    )
     
-    try:
-        # Test with invalid data
-        invalid_data = {"market_size": "invalid"}
-        
-        # Expect error from strategy agent
-        with pytest.raises(Exception):
-            await strategy_agent.analyze_market(invalid_data)
-        
-        # Verify error was logged
-        strategy_metrics = strategy_agent.analyze_performance()
-        assert strategy_metrics['success_rate'] < 1.0
-        
-        # Test recovery with valid data
-        valid_data = {
-            "market_size": 1000000,
-            "growth_rate": 0.15
-        }
-        
-        # Should succeed
-        result = await strategy_agent.analyze_market(valid_data)
-        assert result["status"] == "success"
-        
-        # Verify recovery in metrics
-        updated_metrics = strategy_agent.analyze_performance()
-        assert updated_metrics['total_actions'] > strategy_metrics['total_actions']
+    # Execute successful task
+    result = await test_agent.execute_task(task)
+    assert result['status'] == 'success'
     
-    finally:
-        # Cleanup
-        await strategy_agent.cleanup()
-        await marketing_agent.cleanup()
+    # Mock failed execution
+    async def mock_failure(task):
+        raise Exception("Test error")
+    test_agent.crew_agent.set_execute(mock_failure)
+    
+    # Execute failed task
+    with pytest.raises(Exception):
+        await test_agent.execute_task(task)
+    
+    # Verify metrics were updated
+    metrics = test_agent.metrics.analyze_performance()
+    assert metrics['total_actions'] == 2
+    assert metrics['success_rate'] == 0.5
+    assert metrics['error_rate'] == 0.5
+    assert 'warning' in metrics  # Should warn about performance threshold
 
 @pytest.mark.asyncio
-async def test_memory_context_sharing(
-    mock_knowledge_base: Any,
-    strategy_config: AgentConfig,
-    marketing_config: AgentConfig
-):
-    """Test memory context sharing between agents."""
-    # Create agents with config
-    strategy_agent = StrategyAgent(strategy_config, mock_knowledge_base)
-    marketing_agent = MarketingAgent(marketing_config, mock_knowledge_base)
+async def test_memory_metrics_interaction(test_agent):
+    """Test interaction between memory management and metrics tracking."""
+    # Add memories and verify metrics
+    for i in range(3):
+        test_agent.memory.add_memory({
+            'content': f'Memory {i}',
+            'timestamp': datetime.now()
+        })
+        test_agent.metrics.log_action(
+            action_name="add_memory",
+            status="success",
+            memory_id=i
+        )
     
-    try:
-        # Initial market analysis
-        market_data = {
-            "market_size": 1000000,
-            "growth_rate": 0.15,
-            "key_trend": "Sustainability focus"
-        }
-        
-        # Perform initial analysis
-        analysis = await strategy_agent.analyze_market(market_data)
-        
-        # Create first campaign
-        campaign1 = await marketing_agent.create_campaign(analysis)
-        
-        # Update market data
-        market_data["key_trend"] = "Digital transformation"
-        
-        # Perform second analysis
-        analysis2 = await strategy_agent.analyze_market(market_data)
-        
-        # Create second campaign
-        campaign2 = await marketing_agent.create_campaign(analysis2)
-        
-        # Verify memory retention and context awareness
-        strategy_memory = strategy_agent.memory.get_relevant_memory("market analysis")
-        marketing_memory = marketing_agent.memory.get_relevant_memory("campaign")
-        
-        # Check that both analyses are in memory
-        assert len(strategy_memory) >= 2
-        assert len(marketing_memory) >= 2
-        
-        # Verify chronological order (most recent first)
-        assert strategy_memory[0]['timestamp'] > strategy_memory[1]['timestamp']
-        assert marketing_memory[0]['timestamp'] > marketing_memory[1]['timestamp']
+    # Verify memory state
+    assert test_agent.memory.size == 3
+    assert test_agent.memory.utilization == 0.6  # 3/5
     
-    finally:
-        # Cleanup
-        await strategy_agent.cleanup()
-        await marketing_agent.cleanup()
+    # Verify metrics
+    metrics = test_agent.metrics.analyze_performance()
+    assert metrics['total_actions'] == 3
+    assert metrics['success_rate'] == 1.0
+    
+    # Add memories beyond capacity
+    for i in range(3):
+        test_agent.memory.add_memory({
+            'content': f'Overflow Memory {i}',
+            'timestamp': datetime.now()
+        })
+    
+    # Verify memory management
+    assert test_agent.memory.size == 5  # Capped at memory_size
+    assert test_agent.memory.is_full
+    
+    # Verify most recent memories were kept
+    memories = test_agent.memory.get_relevant_memory("")
+    assert all('Overflow Memory' in m['content'] for m in memories[:3])
+
+@pytest.mark.asyncio
+async def test_cleanup_integration(test_agent):
+    """Test integrated cleanup across all components."""
+    # Add data to all components
+    test_agent.memory.add_memory({'content': 'test'})
+    test_agent.metrics.log_action("test_action", status="success")
+    
+    task = Task(
+        description="Test task",
+        expected_output="Test output"
+    )
+    
+    await test_agent.execute_task(task)
+    
+    # Verify data was added
+    assert test_agent.memory.size > 0
+    assert len(test_agent.metrics.action_history) > 0
+    assert test_agent.task_manager.get_metrics()['total_executions'] > 0
+    
+    # Perform cleanup
+    await test_agent.cleanup()
+    
+    # Verify all components were cleaned
+    assert test_agent.memory.size == 0
+    assert len(test_agent.metrics.action_history) == 0
+    assert test_agent.task_manager.get_metrics()['total_executions'] == 0
+    assert test_agent.state.action_history == []
+
+@pytest.mark.asyncio
+async def test_rate_limiting_integration(test_agent):
+    """Test rate limiting integration across components."""
+    task = Task(
+        description="Rate limited task",
+        expected_output="Test output"
+    )
+    
+    # Execute tasks rapidly
+    start_time = datetime.now()
+    tasks = []
+    for _ in range(3):
+        tasks.append(test_agent.execute_task(task))
+    
+    # Wait for all tasks
+    await asyncio.gather(*tasks)
+    duration = (datetime.now() - start_time).total_seconds()
+    
+    # Verify rate limiting
+    min_delay = 60 / test_agent.task_manager.config.max_rpm
+    min_expected_duration = (len(tasks) - 1) * min_delay
+    assert duration >= min_expected_duration * 0.5
+    
+    # Verify metrics captured rate-limited execution
+    metrics = test_agent.metrics.analyze_performance()
+    assert metrics['total_actions'] == 3
+    assert metrics['success_rate'] == 1.0
+
+@pytest.mark.asyncio
+async def test_error_handling_integration(test_agent):
+    """Test error handling integration across components."""
+    task = Task(
+        description="Error test task",
+        expected_output="Test output"
+    )
+    
+    # Mock an error
+    async def mock_error(task):
+        raise ValueError("Test error")
+    test_agent.crew_agent.set_execute(mock_error)
+    
+    # Execute task and verify error handling
+    with pytest.raises(Exception):
+        await test_agent.execute_task(task)
+    
+    # Verify error was recorded in metrics
+    metrics = test_agent.metrics.analyze_performance()
+    assert metrics['error_rate'] > 0
+    assert metrics['total_actions'] == 1
+    
+    # Verify error was added to agent state
+    assert test_agent.state.error_count == 1
+    assert len(test_agent.state.action_history) == 1
+    assert test_agent.state.action_history[0]['status'] == 'failed'

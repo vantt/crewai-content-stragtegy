@@ -1,23 +1,9 @@
 """Data models for agent configuration and state."""
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from enum import Enum
 from datetime import datetime
 
-class AgentRole(str, Enum):
-    """Defines possible agent roles."""
-    STRATEGY = "strategy"
-    MARKETING = "marketing"
-    CONTENT = "content"
-    PLANNING = "planning"
-    EXECUTION = "execution"
-    CRITIC = "critic"
-
-class AgentType(str, Enum):
-    """Defines possible agent types."""
-    PRIMARY = "primary"
-    ADVERSARY = "adversary"
-    ASSISTANT = "assistant"
+from .types import AgentRole, AgentType
 
 @dataclass
 class TaskConfig:

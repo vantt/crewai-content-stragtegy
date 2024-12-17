@@ -1,59 +1,38 @@
-"""Core agent functionality and base classes.
-
-This module provides the foundational agent architecture used throughout the system.
-It defines the BaseAgent class which implements core functionality like:
-- Agent initialization and configuration
-- Basic lifecycle management
-- Goal and backstory generation
-- Integration with CrewAI
-
-Example:
-    ```python
-    from src.agents.models import AgentConfig
-    from src.agents.types import AgentRole, AgentType
-
-    # Create agent configuration
-    config = AgentConfig(
-        role=AgentRole.STRATEGY,
-        agent_type=AgentType.PRIMARY,
-        temperature=0.7
-    )
-
-    # Initialize base agent
-    agent = BaseAgent(config, knowledge_base)
-
-    # Use the agent
-    result = await agent.execute_task(task)
-    ```
-"""
+"""Core agent functionality and base classes."""
 from typing import Any, Dict, Optional
 import uuid
-from crewai import Agent
+from datetime import datetime
+from crewai import Agent, Task
 from loguru import logger
 
-from .models import AgentConfig, AgentState
+from .types import AgentRole, AgentType, TaskResult
+from .models import AgentConfig, AgentState, MemoryConfig, MetricsConfig, TaskConfig
 from .memory import AgentMemory
 from .metrics import AgentMetrics
 from .task import TaskManager
 
 class BaseAgent:
-    """Base agent implementation with core functionality.
+    """Base agent implementation with core functionality."""
     
-    This class provides the foundation for all specialized agents in the system.
-    It handles basic initialization, configuration management, and integration
-    with the CrewAI framework.
+    # Role-specific goals
+    ROLE_GOALS = {
+        AgentRole.STRATEGY: "Develop effective marketing strategies",
+        AgentRole.MARKETING: "Create engaging marketing campaigns",
+        AgentRole.CONTENT: "Produce high-quality content",
+        AgentRole.PLANNING: "Create detailed execution plans",
+        AgentRole.EXECUTION: "Execute tasks efficiently and accurately",
+        AgentRole.CRITIC: "Provide constructive feedback and improvements"
+    }
     
-    Attributes:
-        agent_id: Unique identifier for the agent
-        name: Human-readable name for the agent
-        config: Agent configuration settings
-        knowledge_base: Reference to shared knowledge base
-        crew_agent: CrewAI agent instance
-        state: Agent state tracking
-        memory: Agent memory management
-        metrics: Performance metrics tracking
-        task_manager: Task execution management
-    """
+    # Role-specific backstories
+    ROLE_BACKSTORIES = {
+        AgentRole.STRATEGY: "Expert marketing strategist with years of experience",
+        AgentRole.MARKETING: "Seasoned marketing professional skilled in campaign management",
+        AgentRole.CONTENT: "Creative content producer with expertise in multiple formats",
+        AgentRole.PLANNING: "Detail-oriented planner with strong project management skills",
+        AgentRole.EXECUTION: "Efficient executor with focus on delivering results",
+        AgentRole.CRITIC: "Analytical reviewer with keen eye for improvement"
+    }
     
     def __init__(
         self,
@@ -61,25 +40,33 @@ class BaseAgent:
         knowledge_base: Any,  # Reference to KnowledgeBase instance
         name: Optional[str] = None
     ):
-        """Initialize base agent.
+        """Initialize base agent."""
+        # Validate configuration
+        if not 0 <= config.temperature <= 1:
+            raise ValueError("Temperature must be between 0 and 1")
+        if config.max_rpm <= 0:
+            raise ValueError("max_rpm must be positive")
         
-        Args:
-            config: Agent configuration settings
-            knowledge_base: Reference to shared knowledge base
-            name: Optional human-readable name
-        """
         self.agent_id = str(uuid.uuid4())
         self.name = name or f"{config.role.value}_{config.agent_type.value}_{self.agent_id[:8]}"
         self.config = config
         self.knowledge_base = knowledge_base
         self.state = AgentState()
         
-        # Initialize components
-        self.memory = AgentMemory(memory_size=config.memory_size)
-        self.metrics = AgentMetrics()
-        self.task_manager = TaskManager(
+        # Initialize components with their respective configs
+        memory_config = MemoryConfig(memory_size=config.memory_size)
+        self.memory = AgentMemory(config=memory_config)
+        
+        metrics_config = MetricsConfig()
+        self.metrics = AgentMetrics(config=metrics_config)
+        
+        task_config = TaskConfig(
             max_rpm=config.max_rpm,
             timeout=config.timeout
+        )
+        self.task_manager = TaskManager(
+            max_rpm=task_config.max_rpm,
+            timeout=task_config.timeout
         )
         
         # Initialize CrewAI agent
@@ -92,59 +79,114 @@ class BaseAgent:
         )
     
     def _get_agent_goal(self) -> str:
-        """Generate agent's goal based on role and type.
-        
-        Returns:
-            String describing the agent's primary goal
-        """
-        if self.config.role.value == "strategy":
-            return "Develop effective marketing strategies"
-        elif self.config.role.value == "marketing":
-            return "Create engaging marketing campaigns"
-        elif self.config.role.value == "content":
-            return "Produce high-quality content"
-        else:
-            return "Support marketing operations"
+        """Generate agent's goal based on role and type."""
+        return self.ROLE_GOALS.get(self.config.role, "Support marketing operations")
     
     def _get_agent_backstory(self) -> str:
-        """Generate agent's backstory based on role and type.
-        
-        Returns:
-            String describing the agent's background and expertise
-        """
-        role_backstories = {
-            "strategy": "Expert marketing strategist with years of experience",
-            "marketing": "Seasoned marketing professional skilled in campaign management",
-            "content": "Creative content producer with expertise in multiple formats",
-            "planning": "Detail-oriented planner with strong project management skills",
-            "execution": "Efficient executor with focus on delivering results",
-            "critic": "Analytical reviewer with keen eye for improvement"
-        }
-        
-        base_backstory = role_backstories.get(
-            self.config.role.value,
+        """Generate agent's backstory based on role and type."""
+        base_backstory = self.ROLE_BACKSTORIES.get(
+            self.config.role,
             "Experienced professional in marketing"
         )
         
-        if self.config.agent_type.value == "adversary":
+        if self.config.agent_type == AgentType.ADVERSARY:
             base_backstory += " with a focus on identifying potential issues"
+        elif self.config.agent_type == AgentType.ASSISTANT:
+            base_backstory += " specializing in supporting and enhancing team capabilities"
         
         return base_backstory
     
-    def record_action(self, action_record: Dict[str, Any]) -> None:
-        """Record an action in the agent's state.
-        
-        Args:
-            action_record: Dictionary containing action details
-        """
-        self.state.add_action(action_record)
+    async def execute_task(self, task: Task) -> TaskResult:
+        """Execute a task and update memory/metrics."""
+        try:
+            # Execute task
+            result = await self.task_manager.execute_task(task, self.crew_agent)
+            
+            # Log successful execution to metrics
+            self.metrics.log_action(
+                action_name=task.description,
+                status="success",
+                start_time=result['start_time'],
+                duration=result['duration'],
+                result=result['result']
+            )
+            
+            # Record successful action in state
+            self.state.add_action({
+                'action': task.description,
+                'timestamp': result['start_time'],
+                'status': 'success',
+                'duration': result['duration'],
+                'result': result['result']
+            })
+            
+            # Update memory with result
+            self.memory.add_memory({
+                'task': task.description,
+                'result': result,
+                'timestamp': result['end_time']
+            })
+            
+            return result
+            
+        except Exception as e:
+            # Get error result from task manager
+            error_result = e.args[1] if len(e.args) > 1 else None
+            error_time = datetime.now()
+            error_duration = 0.0
+            
+            if error_result:
+                error_time = error_result['start_time']
+                error_duration = error_result['duration']
+            
+            # Log failed execution to metrics
+            self.metrics.log_action(
+                action_name=task.description,
+                status="failed",
+                start_time=error_time,
+                duration=error_duration,
+                error=str(e)
+            )
+            
+            # Record failed action in state
+            self.state.add_action({
+                'action': task.description,
+                'timestamp': error_time,
+                'status': 'failed',
+                'duration': error_duration,
+                'error': str(e)
+            })
+            
+            raise
     
-    def analyze_performance(self) -> Dict[str, Any]:
-        """Analyze agent's performance metrics.
+    def record_action(self, action_record: Dict[str, Any]) -> None:
+        """Record an action in the agent's state."""
+        self.state.add_action(action_record)
         
-        Returns:
-            Dict containing performance metrics
-        """
+        # Extract fields for metrics
+        action_name = action_record.get('action', 'unknown')
+        status = action_record.get('status', 'unknown')
+        start_time = action_record.get('timestamp')
+        duration = action_record.get('duration', 0.0)
+        
+        # Remove fields that would conflict with log_action kwargs
+        metrics_record = action_record.copy()
+        metrics_record.pop('action', None)
+        metrics_record.pop('status', None)
+        metrics_record.pop('timestamp', None)
+        metrics_record.pop('duration', None)
+        
+        # Log to metrics
+        self.metrics.log_action(
+            action_name=action_name,
+            status=status,
+            start_time=start_time,
+            duration=duration,
+            **metrics_record
+        )
+    
+    def analyze_performance(self) -> TaskResult:
+        """Analyze agent's performance metrics."""
         return self.metrics.analyze_performance()
     
     async def cleanup(self) -> None:
