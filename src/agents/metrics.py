@@ -1,235 +1,257 @@
-"""Performance metrics tracking and analysis."""
-from typing import List, Optional, Dict, Any
+"""Agent metrics and performance tracking."""
+from typing import Dict, Any, List, Optional
 from datetime import datetime
+from pydantic import BaseModel, Field
+import uuid
 
-from .types import (
-    MetricsData, ActionRecord, ActionStatus, ActionRecordDict,
-    Timestamp, Duration, Result, ValidationResult,
-    is_metrics_data
-)
-from .models import MetricsConfig
+class AgentMetrics(BaseModel):
+    """Metrics for tracking agent performance."""
+    agent_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    success_rate: float = 0.0
+    response_times: List[float] = Field(default_factory=list)
+    task_counts: Dict[str, int] = Field(default_factory=dict)
+    error_counts: Dict[str, int] = Field(default_factory=dict)
+    resource_usage: Dict[str, float] = Field(default_factory=dict)
+    last_updated: datetime = Field(default_factory=datetime.now)
+    action_history: List[Dict[str, Any]] = Field(default_factory=list)
 
-class AgentMetrics:
-    """Handles agent performance metrics and analysis.
-    
-    This class tracks and analyzes agent performance by recording actions,
-    calculating success rates, monitoring response times, and providing
-    performance insights.
-    
-    Attributes:
-        config: Configuration settings for metrics collection
-        action_history: Complete history of recorded actions
-        latest_metrics: Most recent performance metrics
-    """
-    
-    def __init__(self, config: Optional[MetricsConfig] = None) -> None:
-        """Initialize metrics tracking.
-        
-        Args:
-            config: Optional metrics configuration settings. If not provided,
-                   default settings will be used.
-                   
-        Raises:
-            ValueError: If configuration is invalid
-        """
-        self.config = config or MetricsConfig()
-        self._validate_config()
-        self._action_history: List[ActionRecord] = []
-        self._performance_metrics: MetricsData = self._create_empty_metrics()
-    
-    def _validate_config(self) -> ValidationResult:
-        """Validate metrics configuration.
-        
-        Returns:
-            Tuple of (is_valid, error_message)
-            
-        Raises:
-            ValueError: If configuration is invalid
-        """
-        is_valid, error = self.config.validate()
-        if not is_valid:
-            raise ValueError(f"Invalid metrics configuration: {error}")
-        return True, None
-    
-    def _create_empty_metrics(self) -> MetricsData:
-        """Create empty metrics data structure.
-        
-        Returns:
-            Empty metrics data dictionary
-        """
-        return {
-            'total_actions': 0,
-            'successful_actions': 0,
-            'failed_actions': 0,
-            'total_duration': 0.0,
-            'average_response_time': 0.0,
-            'success_rate': 0.0,
-            'error_rate': 0.0,
-            'last_action': None,
-            'last_status': None,
-            'last_updated': datetime.now(),
-            'warning': None
-        }
-    
     def log_action(
         self,
         action_name: str,
-        status: str,
-        start_time: Optional[Timestamp] = None,
-        duration: Optional[Duration] = None,
-        error: Optional[str] = None,
-        **kwargs: Any
-    ) -> Result[ActionRecord]:
-        """Log an agent action with timing and status information.
+        duration: float,
+        success: bool,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Log an agent action.
         
         Args:
-            action_name: Name of the action performed
-            status: Status of the action ('success' or 'failed')
-            start_time: Optional start time of the action
-            duration: Optional duration of the action in seconds
-            error: Optional error message if action failed
-            **kwargs: Additional action metadata
+            action_name: Name of the action
+            duration: Time taken to complete action
+            success: Whether action was successful
+            metadata: Optional additional information
             
         Returns:
-            Result containing the recorded action or error message
-            
-        Example:
-            >>> metrics.log_action(
-            ...     action_name="process_data",
-            ...     status="success",
-            ...     duration=1.5,
-            ...     metadata={"items_processed": 100}
-            ... )
+            Action record
         """
-        try:
-            now = datetime.now()
-            timestamp = start_time or now
-            action_duration = duration or 0.0
-            if start_time and not duration:
-                action_duration = (now - start_time).total_seconds()
-            
-            action_record: ActionRecord = {
-                'action': action_name,
-                'timestamp': timestamp,
-                'duration': action_duration,
-                'status': status,
-                'error': error,
-                'metadata': kwargs.get('metadata', {})
-            }
-            
-            # Add to front of list (most recent first)
-            self._action_history.insert(0, action_record)
-            
-            # Maintain history size limit
-            while len(self._action_history) > self.config.history_size:
-                self._action_history.pop()
-                
-            self._update_metrics(action_record)
-            return Result.ok(action_record)
-            
-        except Exception as e:
-            return Result.err(f"Failed to log action: {str(e)}")
-    
-    def _update_metrics(self, action_record: ActionRecord) -> None:
-        """Update performance metrics with new action.
+        action_record = {
+            "action_name": action_name,
+            "duration": duration,
+            "success": success,
+            "timestamp": datetime.now().isoformat(),
+            "metadata": metadata or {}
+        }
+        
+        self.action_history.append(action_record)
+        
+        # Update task counts
+        self.task_counts[action_name] = self.task_counts.get(action_name, 0) + 1
+        
+        # Update response times
+        self.response_times.append(duration)
+        if len(self.response_times) > 100:  # Keep last 100 times
+            self.response_times = self.response_times[-100:]
+        
+        # Update success rate
+        total_tasks = sum(self.task_counts.values())
+        total_errors = sum(self.error_counts.values())
+        self.success_rate = (total_tasks - total_errors) / total_tasks if total_tasks > 0 else 0.0
+        
+        self.last_updated = datetime.now()
+        return action_record
+
+    def add_task_completion(self, task_type: str, duration: float, success: bool) -> None:
+        """Record task completion metrics.
         
         Args:
-            action_record: Record of the action performed
+            task_type: Type of task completed
+            duration: Time taken to complete task
+            success: Whether task was successful
         """
-        metrics: MetricsData = {}
-        metrics['last_action'] = action_record['action']
-        metrics['last_status'] = action_record['status']
-        metrics['total_actions'] = len(self._action_history)
+        # Update task counts
+        self.task_counts[task_type] = self.task_counts.get(task_type, 0) + 1
         
-        successful = sum(1 for a in self._action_history 
-                        if a['status'] == ActionStatus.SUCCESS.value)
-        failed = sum(1 for a in self._action_history 
-                    if a['status'] == ActionStatus.FAILED.value)
-        total = len(self._action_history)
+        # Update response times
+        self.response_times.append(duration)
+        if len(self.response_times) > 100:  # Keep last 100 times
+            self.response_times = self.response_times[-100:]
         
-        metrics['successful_actions'] = successful
-        metrics['failed_actions'] = failed
-        metrics['success_rate'] = successful / total if total > 0 else 0.0
-        metrics['error_rate'] = failed / total if total > 0 else 0.0
+        # Update success rate
+        total_tasks = sum(self.task_counts.values())
+        total_errors = sum(self.error_counts.values())
+        self.success_rate = (total_tasks - total_errors) / total_tasks if total_tasks > 0 else 0.0
         
-        durations = [a['duration'] for a in self._action_history 
-                    if 'duration' in a]
-        metrics['total_duration'] = sum(durations)
-        metrics['average_response_time'] = (sum(durations) / len(durations) 
-                                          if durations else 0.0)
-        metrics['last_updated'] = datetime.now()
+        self.last_updated = datetime.now()
+
+    def add_error(self, error_type: str) -> None:
+        """Record an error occurrence.
         
-        self._performance_metrics = metrics
-    
-    def analyze_performance(self) -> Result[MetricsData]:
-        """Analyze agent's performance metrics.
+        Args:
+            error_type: Type of error encountered
+        """
+        self.error_counts[error_type] = self.error_counts.get(error_type, 0) + 1
         
-        Calculates comprehensive performance metrics including:
-        - Success and error rates
-        - Response times
-        - Performance warnings
+        # Update success rate
+        total_tasks = sum(self.task_counts.values())
+        total_errors = sum(self.error_counts.values())
+        self.success_rate = (total_tasks - total_errors) / total_tasks if total_tasks > 0 else 0.0
+        
+        self.last_updated = datetime.now()
+
+    def update_resource_usage(
+        self,
+        cpu_percent: float,
+        memory_mb: float,
+        active_tasks: int
+    ) -> None:
+        """Update resource usage metrics.
+        
+        Args:
+            cpu_percent: CPU usage percentage
+            memory_mb: Memory usage in MB
+            active_tasks: Number of active tasks
+        """
+        self.resource_usage.update({
+            "cpu_percent": cpu_percent,
+            "memory_mb": memory_mb,
+            "active_tasks": active_tasks
+        })
+        self.last_updated = datetime.now()
+
+    def get_average_response_time(self) -> float:
+        """Get average response time.
         
         Returns:
-            Result containing performance metrics or error message
-            
-        Example:
-            >>> result = metrics.analyze_performance()
-            >>> if result.success:
-            ...     performance = result.value
-            ...     print(f"Success rate: {performance['success_rate']:.2%}")
+            Average response time in seconds
         """
-        try:
-            if not self._action_history:
-                return Result.ok(self._create_empty_metrics())
-            
-            successful = sum(1 for a in self._action_history 
-                           if a['status'] == ActionStatus.SUCCESS.value)
-            failed = sum(1 for a in self._action_history 
-                        if a['status'] == ActionStatus.FAILED.value)
-            total = len(self._action_history)
-            durations = [a['duration'] for a in self._action_history 
-                        if 'duration' in a]
-            
-            metrics: MetricsData = {
-                'total_actions': total,
-                'successful_actions': successful,
-                'failed_actions': failed,
-                'success_rate': successful / total if total > 0 else 0.0,
-                'error_rate': failed / total if total > 0 else 0.0,
-                'total_duration': sum(durations),
-                'average_response_time': (sum(durations) / len(durations) 
-                                        if durations else 0.0),
-                'last_updated': datetime.now(),
-                'warning': None
-            }
-            
-            # Check performance threshold
-            if metrics['success_rate'] < self.config.performance_threshold:
-                metrics['warning'] = (
-                    f"Success rate {metrics['success_rate']:.2%} below "
-                    f"threshold {self.config.performance_threshold:.2%}"
-                )
-            
-            if not is_metrics_data(metrics):
-                return Result.err("Invalid metrics data format")
-            
-            self._performance_metrics = metrics
-            return Result.ok(metrics)
-            
-        except Exception as e:
-            return Result.err(f"Failed to analyze performance: {str(e)}")
+        return sum(self.response_times) / len(self.response_times) if self.response_times else 0.0
+
+    def get_error_rate(self) -> float:
+        """Get error rate.
+        
+        Returns:
+            Error rate as percentage
+        """
+        total_tasks = sum(self.task_counts.values())
+        total_errors = sum(self.error_counts.values())
+        return (total_errors / total_tasks * 100) if total_tasks > 0 else 0.0
+
+    def get_metrics_summary(self) -> Dict[str, Any]:
+        """Get summary of all metrics.
+        
+        Returns:
+            Dictionary of metric summaries
+        """
+        return {
+            "agent_id": self.agent_id,
+            "success_rate": self.success_rate,
+            "avg_response_time": self.get_average_response_time(),
+            "error_rate": self.get_error_rate(),
+            "total_tasks": sum(self.task_counts.values()),
+            "total_errors": sum(self.error_counts.values()),
+            "resource_usage": self.resource_usage,
+            "last_updated": self.last_updated.isoformat()
+        }
+
+class AgentMetricsCollector:
+    """Collector for managing multiple agents' metrics."""
     
-    @property
-    def action_history(self) -> List[ActionRecord]:
-        """Get the complete action history."""
-        return self._action_history.copy()
-    
-    @property
-    def latest_metrics(self) -> MetricsData:
-        """Get the most recent performance metrics."""
-        return self._performance_metrics.copy()
-    
-    def clear_history(self) -> None:
-        """Clear action history and reset metrics."""
-        self._action_history.clear()
-        self._performance_metrics = self._create_empty_metrics()
+    def __init__(self):
+        """Initialize metrics collector."""
+        self.agent_metrics: Dict[str, AgentMetrics] = {}
+
+    def get_or_create_metrics(self, agent_id: str) -> AgentMetrics:
+        """Get or create metrics for an agent.
+        
+        Args:
+            agent_id: Agent identifier
+            
+        Returns:
+            Agent metrics instance
+        """
+        if agent_id not in self.agent_metrics:
+            self.agent_metrics[agent_id] = AgentMetrics(agent_id=agent_id)
+        return self.agent_metrics[agent_id]
+
+    def record_task(
+        self,
+        agent_id: str,
+        task_type: str,
+        duration: float,
+        success: bool
+    ) -> None:
+        """Record task completion for an agent.
+        
+        Args:
+            agent_id: Agent identifier
+            task_type: Type of task completed
+            duration: Time taken to complete task
+            success: Whether task was successful
+        """
+        metrics = self.get_or_create_metrics(agent_id)
+        metrics.add_task_completion(task_type, duration, success)
+
+    def record_error(self, agent_id: str, error_type: str) -> None:
+        """Record error for an agent.
+        
+        Args:
+            agent_id: Agent identifier
+            error_type: Type of error encountered
+        """
+        metrics = self.get_or_create_metrics(agent_id)
+        metrics.add_error(error_type)
+
+    def update_resources(
+        self,
+        agent_id: str,
+        cpu_percent: float,
+        memory_mb: float,
+        active_tasks: int
+    ) -> None:
+        """Update resource usage for an agent.
+        
+        Args:
+            agent_id: Agent identifier
+            cpu_percent: CPU usage percentage
+            memory_mb: Memory usage in MB
+            active_tasks: Number of active tasks
+        """
+        metrics = self.get_or_create_metrics(agent_id)
+        metrics.update_resource_usage(cpu_percent, memory_mb, active_tasks)
+
+    def get_all_metrics(self) -> Dict[str, Dict[str, Any]]:
+        """Get metrics for all agents.
+        
+        Returns:
+            Dictionary of agent metrics summaries
+        """
+        return {
+            agent_id: metrics.get_metrics_summary()
+            for agent_id, metrics in self.agent_metrics.items()
+        }
+
+    def get_system_summary(self) -> Dict[str, Any]:
+        """Get system-wide metrics summary.
+        
+        Returns:
+            System metrics summary
+        """
+        all_metrics = self.get_all_metrics()
+        if not all_metrics:
+            return {}
+            
+        total_tasks = sum(m["total_tasks"] for m in all_metrics.values())
+        total_errors = sum(m["total_errors"] for m in all_metrics.values())
+        avg_success_rate = sum(m["success_rate"] for m in all_metrics.values()) / len(all_metrics)
+        avg_response_time = sum(m["avg_response_time"] for m in all_metrics.values()) / len(all_metrics)
+        
+        return {
+            "total_agents": len(all_metrics),
+            "total_tasks": total_tasks,
+            "total_errors": total_errors,
+            "avg_success_rate": avg_success_rate,
+            "avg_response_time": avg_response_time,
+            "active_agents": sum(
+                1 for m in all_metrics.values()
+                if m["resource_usage"].get("active_tasks", 0) > 0
+            )
+        }

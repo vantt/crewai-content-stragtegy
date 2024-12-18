@@ -1,34 +1,8 @@
-"""Mock data provider for agent testing."""
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+"""Mock data provider for testing."""
+from typing import Dict, Any, List
 
 class MockDataProvider:
-    """Provides mock data for different agent types."""
-    
-    @staticmethod
-    def get_target_audience_data(market_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get mock target audience data.
-        
-        Args:
-            market_data: Market data containing demographics
-            
-        Returns:
-            Mock target audience data
-        """
-        # Ensure we return the exact demographics from market data
-        demographics = market_data.get("demographics", {})
-        if not demographics and isinstance(market_data, dict):
-            # If demographics not found at top level, use the entire market_data
-            # This handles cases where market_data itself is the demographics
-            demographics = market_data
-            
-        return {
-            "segments": [{"type": "primary", "description": "test"}],
-            "pain_points": ["test pain point"],
-            "goals": ["test goal"],
-            "demographics": demographics,
-            "behavioral_traits": ["test trait"]
-        }
+    """Provides mock data for testing."""
     
     @staticmethod
     def get_value_proposition_data() -> Dict[str, Any]:
@@ -38,88 +12,213 @@ class MockDataProvider:
             Mock value proposition data
         """
         return {
-            "core_benefits": ["test benefit 1", "test benefit 2"],
-            "unique_factors": ["test factor"],
-            "proof_points": [{"point": "test", "evidence": "test"}],
-            "competitive_advantages": ["test advantage"]
+            "key_benefits": [
+                "Improved efficiency",
+                "Cost reduction",
+                "Enhanced accuracy"
+            ],
+            "unique_advantages": [
+                "Advanced AI capabilities",
+                "Real-time processing",
+                "Domain expertise"
+            ],
+            "solution_features": [
+                {
+                    "name": "AI Analytics",
+                    "description": "Advanced analytics powered by AI"
+                },
+                {
+                    "name": "Real-time Processing",
+                    "description": "Process data in real-time"
+                },
+                {
+                    "name": "Custom Integration",
+                    "description": "Easy integration with existing systems"
+                }
+            ],
+            "target_outcomes": [
+                "30% efficiency improvement",
+                "25% cost reduction",
+                "99% accuracy rate"
+            ],
+            "competitive_differentiators": [
+                "Most advanced AI technology",
+                "Fastest processing speed",
+                "Best-in-class accuracy"
+            ]
         }
     
     @staticmethod
     def get_opportunities_data() -> Dict[str, Any]:
-        """Get mock opportunities and risks data.
+        """Get mock opportunities data.
         
         Returns:
-            Mock opportunities and risks data
+            Mock opportunities data
         """
         return {
-            "opportunities": [{"name": "test opportunity", "impact": "high"}],
-            "risks": [{"name": "test risk", "severity": "medium"}],
-            "recommendations": [{"action": "test action", "priority": "high"}]
-        }
-    
-    @staticmethod
-    def get_assumptions_data() -> List[Dict[str, Any]]:
-        """Get mock assumptions data.
-        
-        Returns:
-            List of mock assumptions
-        """
-        return [
-            {
-                "assumption": "test assumption 1",
-                "evidence": ["test evidence 1"],
-                "confidence_level": 0.8,
-                "potential_risks": ["test risk 1"]
-            },
-            {
-                "assumption": "test assumption 2",
-                "evidence": ["test evidence 2"],
-                "confidence_level": 0.7,
-                "potential_risks": ["test risk 2"]
-            }
-        ]
-    
-    @staticmethod
-    def get_competitive_analysis_data() -> Dict[str, Any]:
-        """Get mock competitive analysis data.
-        
-        Returns:
-            Mock competitive analysis data
-        """
-        return {
-            "competitors": [
-                {"name": "test competitor 1", "strength": "test 1"},
-                {"name": "test competitor 2", "strength": "test 2"}
+            "opportunities": [
+                {
+                    "name": "Market Expansion",
+                    "impact": "High"
+                },
+                {
+                    "name": "Technology Leadership",
+                    "impact": "Medium"
+                }
             ],
-            "market_share": {"test": 0.5},
-            "strengths": ["test strength"],
-            "weaknesses": ["test weakness"],
-            "opportunities": ["test opportunity"],
-            "threats": ["test threat"]
+            "risks": [
+                {
+                    "name": "Competition",
+                    "severity": "Medium"
+                },
+                {
+                    "name": "Integration Complexity",
+                    "severity": "High"
+                }
+            ],
+            "recommendations": [
+                {
+                    "action": "Accelerate development",
+                    "priority": "High"
+                },
+                {
+                    "action": "Build partnerships",
+                    "priority": "Medium"
+                }
+            ]
         }
     
     @staticmethod
-    def get_market_analysis_data(market_data: Dict[str, Any]) -> Dict[str, Any]:
+    def get_market_analysis_data(context: Dict[str, Any]) -> Dict[str, Any]:
         """Get mock market analysis data.
         
         Args:
-            market_data: Market data to include
+            context: Context data to incorporate
             
         Returns:
             Mock market analysis data
         """
         return {
-            "status": "success",
-            "market_analysis": {
-                "market_size": market_data.get("market_size", 0),
-                "growth_rate": market_data.get("growth_rate", 0),
-                "competitors": market_data.get("competitors", []),
-                "target_audience": market_data.get("target_audience", "")
-            },
-            "recommendations": [
-                "Focus on market expansion",
-                "Invest in digital transformation",
-                "Enhance customer experience"
+            "market_size": context.get("market_size", 5000),
+            "growth_rate": context.get("growth_rate", 25),
+            "competition_level": context.get("competition_level", "Medium"),
+            "target_segments": context.get("target_segment", ["Enterprise"]),
+            "key_trends": [
+                "AI adoption increasing",
+                "Focus on real-time analytics",
+                "Integration demands growing"
+            ]
+        }
+    
+    @staticmethod
+    def get_risk_assessment_data() -> Dict[str, Any]:
+        """Get mock risk assessment data.
+        
+        Returns:
+            Mock risk assessment data
+        """
+        return {
+            "risk_factors": [
+                {
+                    "name": "Market Competition",
+                    "likelihood": 0.7,
+                    "impact": 0.8
+                },
+                {
+                    "name": "Technical Complexity",
+                    "likelihood": 0.6,
+                    "impact": 0.7
+                }
             ],
-            "confidence_score": 0.85
+            "impact_levels": {
+                "revenue": 0.7,
+                "market_share": 0.6,
+                "reputation": 0.5
+            },
+            "mitigation_strategies": [
+                {
+                    "strategy": "Accelerate development",
+                    "effectiveness": "High"
+                },
+                {
+                    "strategy": "Form strategic partnerships",
+                    "effectiveness": "Medium"
+                }
+            ],
+            "contingency_plans": [
+                {
+                    "trigger": "Market share drop",
+                    "action": "Price adjustment"
+                },
+                {
+                    "trigger": "Integration issues",
+                    "action": "Additional support"
+                }
+            ],
+            "overall_risk_level": 0.65
+        }
+    
+    @staticmethod
+    def get_market_validation_data() -> Dict[str, Any]:
+        """Get mock market validation data.
+        
+        Returns:
+            Mock market validation data
+        """
+        return {
+            "data_sources": [
+                "Market research reports",
+                "Customer interviews",
+                "Competitor analysis"
+            ],
+            "validation_methods": [
+                "Survey analysis",
+                "Expert interviews",
+                "Data mining"
+            ],
+            "findings": [
+                {
+                    "area": "Market need",
+                    "validation": "Strong demand confirmed",
+                    "confidence": 0.9
+                },
+                {
+                    "area": "Price point",
+                    "validation": "Within acceptable range",
+                    "confidence": 0.8
+                }
+            ],
+            "confidence_level": 0.85,
+            "recommendations": [
+                {
+                    "area": "Pricing",
+                    "action": "Maintain premium positioning"
+                },
+                {
+                    "area": "Features",
+                    "action": "Focus on AI capabilities"
+                }
+            ]
+        }
+    
+    @staticmethod
+    def get_challenge_data() -> Dict[str, Any]:
+        """Get mock challenge data.
+        
+        Returns:
+            Mock challenge data
+        """
+        return {
+            "assumptions": [
+                {
+                    "assumption": "Market size estimate",
+                    "challenge": "May be overestimated",
+                    "evidence": "Recent market slowdown"
+                },
+                {
+                    "assumption": "Technical feasibility",
+                    "challenge": "Integration complexity",
+                    "evidence": "Similar project delays"
+                }
+            ]
         }

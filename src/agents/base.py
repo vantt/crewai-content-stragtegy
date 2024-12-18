@@ -55,11 +55,16 @@ class Agent(BaseAgent):
             duration: Duration of the action in seconds
             success: Whether the action was successful
         """
+        metadata = {
+            "success": success,
+            "start_time": datetime.now().isoformat()
+        }
+        
         self.metrics.log_action(
             action_name=action_name,
-            status="success" if success else "failed",
             duration=duration,
-            start_time=datetime.now()
+            success=success,
+            metadata=metadata
         )
     
     def _create_task_context(self, task_description: str, original_context: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -162,12 +167,9 @@ class Agent(BaseAgent):
     
     def analyze_performance(self) -> Dict[str, Any]:
         """Analyze agent's performance metrics."""
-        metrics = self.metrics.analyze_performance()
-        metrics['memory_utilization'] = self.memory.utilization
-        return metrics
+        return self.metrics.get_metrics_summary()
     
     async def cleanup(self):
         """Cleanup agent resources."""
         self.memory.clear()
-        self.metrics.clear_history()
         self.task_manager.cleanup()

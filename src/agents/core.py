@@ -61,7 +61,7 @@ class BaseAgent:
         self.memory = AgentMemory(config=memory_config)
         
         metrics_config = MetricsConfig()
-        self.metrics = AgentMetrics(config=metrics_config)
+        self.metrics = AgentMetrics()
         
         task_config = TaskConfig(
             max_rpm=config.max_rpm,
@@ -106,19 +106,23 @@ class BaseAgent:
             result = await self.task_manager.execute_task(task, self.crew_agent)
             
             # Log successful execution to metrics
-            metrics_result = self.metrics.log_action(
+            metadata = {
+                'start_time': result['start_time'].isoformat(),
+                'result': result['result']
+            }
+            
+            self.metrics.log_action(
                 action_name=task.description,
-                status=ActionStatus.SUCCESS.value,
-                start_time=result['start_time'],
                 duration=result['duration'],
-                result=result['result']
+                success=True,
+                metadata=metadata
             )
             
             # Record successful action in state
             self.state.add_action({
                 'action': task.description,
                 'timestamp': result['start_time'],
-                'status': ActionStatus.SUCCESS.value,
+                'success': True,
                 'duration': result['duration'],
                 'result': result['result']
             })
@@ -145,19 +149,23 @@ class BaseAgent:
                 error_duration = error_result['duration']
             
             # Log failed execution to metrics
-            metrics_result = self.metrics.log_action(
+            metadata = {
+                'start_time': error_time.isoformat(),
+                'error': str(e)
+            }
+            
+            self.metrics.log_action(
                 action_name=task.description,
-                status=ActionStatus.FAILED.value,
-                start_time=error_time,
                 duration=error_duration,
-                error=str(e)
+                success=False,
+                metadata=metadata
             )
             
             # Record failed action in state
             self.state.add_action({
                 'action': task.description,
                 'timestamp': error_time,
-                'status': ActionStatus.FAILED.value,
+                'success': False,
                 'duration': error_duration,
                 'error': str(e)
             })
@@ -170,36 +178,29 @@ class BaseAgent:
         
         # Extract fields for metrics
         action_name = action_record.get('action', 'unknown')
-        status = action_record.get('status', 'unknown')
-        start_time = action_record.get('timestamp')
+        success = action_record.get('success', True)
         duration = action_record.get('duration', 0.0)
         
-        # Remove fields that would conflict with log_action kwargs
-        metrics_record = action_record.copy()
-        metrics_record.pop('action', None)
-        metrics_record.pop('status', None)
-        metrics_record.pop('timestamp', None)
-        metrics_record.pop('duration', None)
+        # Create metadata from remaining fields
+        metadata = action_record.copy()
+        metadata.pop('action', None)
+        metadata.pop('success', None)
+        metadata.pop('duration', None)
         
         # Log to metrics
-        metrics_result = self.metrics.log_action(
+        self.metrics.log_action(
             action_name=action_name,
-            status=status,
-            start_time=start_time,
             duration=duration,
-            **metrics_record
+            success=success,
+            metadata=metadata
         )
     
     def analyze_performance(self) -> MetricsData:
         """Analyze agent's performance metrics."""
-        result = self.metrics.analyze_performance()
-        if result.success:
-            return result.value
-        raise ValueError(result.error or "Failed to analyze performance")
+        return self.metrics.get_metrics_summary()
     
     async def cleanup(self) -> None:
         """Cleanup agent resources."""
         self.memory.clear()
-        self.metrics.clear_history()
         self.task_manager.cleanup()
         self.state.clear()

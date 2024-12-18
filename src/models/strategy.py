@@ -1,154 +1,57 @@
 """Strategy-related data models."""
-from typing import Dict, List, Any
+from typing import Dict, Any, List, Optional
 from datetime import datetime
+import uuid
 from pydantic import BaseModel, Field
 
 class TargetAudience(BaseModel):
-    """Target audience analysis model."""
-    segments: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Market segments with detailed characteristics"
-    )
-    pain_points: List[str] = Field(
-        default_factory=list,
-        description="Key pain points of target audience"
-    )
-    goals: List[str] = Field(
-        default_factory=list,
-        description="Primary goals and objectives of target audience"
-    )
-    demographics: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Demographic information"
-    )
-    behavioral_traits: List[str] = Field(
-        default_factory=list,
-        description="Key behavioral characteristics"
-    )
+    """Target audience model."""
+    segments: List[Dict[str, str]]
+    pain_points: List[str]
+    goals: List[str]
+    demographics: Dict[str, Any]
+    behavioral_traits: List[str]
 
 class ValueProposition(BaseModel):
     """Value proposition model."""
-    core_benefits: List[str] = Field(
-        default_factory=list,
-        description="Core benefits offered to customers"
-    )
-    unique_factors: List[str] = Field(
-        default_factory=list,
-        description="Unique differentiating factors"
-    )
-    proof_points: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Evidence supporting value claims"
-    )
-    competitive_advantages: List[str] = Field(
-        default_factory=list,
-        description="Key competitive advantages"
-    )
+    key_benefits: List[str]
+    unique_advantages: List[str]
+    solution_features: List[Dict[str, str]]
+    target_outcomes: List[str]
+    competitive_differentiators: List[str]
+
+class MarketValidation(BaseModel):
+    """Market validation model."""
+    data_sources: List[str]
+    validation_methods: List[str]
+    findings: List[Dict[str, Any]]
+    confidence_level: float
+    recommendations: List[Dict[str, str]]
+
+class RiskAssessment(BaseModel):
+    """Risk assessment model."""
+    risk_factors: List[Dict[str, Any]]
+    impact_levels: Dict[str, float]
+    mitigation_strategies: List[Dict[str, str]]
+    contingency_plans: List[Dict[str, str]]
+    overall_risk_level: float
+
+class Challenge(BaseModel):
+    """Challenge model for strategy analysis."""
+    challenge_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=datetime.now)
+    challenged_assumptions: List[Dict[str, Any]]
+    market_validation: MarketValidation
+    risk_assessment: RiskAssessment
+    confidence_score: float
 
 class StrategyAnalysis(BaseModel):
-    """Complete strategy analysis model."""
-    analysis_id: str = Field(
-        description="Unique identifier for analysis"
-    )
-    timestamp: datetime = Field(
-        default_factory=datetime.now,
-        description="Time of analysis"
-    )
-    target_audience: TargetAudience = Field(
-        description="Target audience analysis"
-    )
-    value_proposition: ValueProposition = Field(
-        description="Value proposition analysis"
-    )
-    market_opportunities: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Identified market opportunities"
-    )
-    risk_factors: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Identified risk factors"
-    )
-    recommendations: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Strategic recommendations"
-    )
-    confidence_score: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Confidence score for analysis"
-    )
-
-class MarketAssumption(BaseModel):
-    """Market assumption model."""
-    assumption: str = Field(
-        description="The assumption being made"
-    )
-    evidence: List[str] = Field(
-        default_factory=list,
-        description="Supporting evidence"
-    )
-    confidence_level: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Confidence level in assumption"
-    )
-    potential_risks: List[str] = Field(
-        default_factory=list,
-        description="Potential risks if assumption is wrong"
-    )
-
-class CompetitiveAnalysis(BaseModel):
-    """Competitive analysis model."""
-    competitors: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Competitor details"
-    )
-    market_share: Dict[str, float] = Field(
-        default_factory=dict,
-        description="Market share by competitor"
-    )
-    strengths: List[str] = Field(
-        default_factory=list,
-        description="Competitive strengths"
-    )
-    weaknesses: List[str] = Field(
-        default_factory=list,
-        description="Competitive weaknesses"
-    )
-    opportunities: List[str] = Field(
-        default_factory=list,
-        description="Market opportunities"
-    )
-    threats: List[str] = Field(
-        default_factory=list,
-        description="Market threats"
-    )
-
-class MarketChallenge(BaseModel):
-    """Market challenge model."""
-    challenge_id: str = Field(
-        description="Unique identifier for challenge"
-    )
-    timestamp: datetime = Field(
-        default_factory=datetime.now,
-        description="Time of challenge"
-    )
-    assumptions: List[MarketAssumption] = Field(
-        default_factory=list,
-        description="Challenged assumptions"
-    )
-    competitive_analysis: CompetitiveAnalysis = Field(
-        description="Competitive analysis"
-    )
-    market_risks: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Identified market risks"
-    )
-    alternative_approaches: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Alternative strategic approaches"
-    )
-    validation_metrics: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Metrics for validation"
-    )
+    """Strategy analysis model."""
+    analysis_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=datetime.now)
+    target_audience: TargetAudience
+    value_proposition: ValueProposition
+    market_opportunities: List[Dict[str, Any]]
+    risk_factors: List[Dict[str, Any]]
+    recommendations: List[Dict[str, Any]]
+    confidence_score: float

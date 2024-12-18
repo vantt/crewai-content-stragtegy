@@ -1,152 +1,256 @@
-"""Tests for agent metrics tracking functionality."""
+"""Tests for enhanced metrics system."""
 import pytest
 from datetime import datetime, timedelta
-from src.agents.metrics import AgentMetrics
-from src.agents.models import MetricsConfig
+from typing import Dict, Any, List
+
+from src.agents.metrics import (
+    MetricsAnalyzer,
+    MetricType,
+    ConsensusMetric,
+    EvidenceMetric,
+    PerformanceMetric
+)
 
 @pytest.fixture
-def metrics_config():
-    """Test metrics configuration."""
-    return MetricsConfig(
-        enabled=True,
-        history_size=5,
-        aggregation_interval=60,
-        performance_threshold=0.8
-    )
+def metrics_analyzer():
+    """Fixture providing a metrics analyzer instance."""
+    return MetricsAnalyzer()
 
 @pytest.fixture
-def metrics(metrics_config):
-    """Test metrics instance."""
-    return AgentMetrics(config=metrics_config)
+def sample_analysis():
+    """Fixture providing sample analysis data."""
+    return {
+        "response_points": [
+            {
+                "addresses": "concern1",
+                "details": ["point1", "point2", "point3"],
+                "addresses_risk": "market",
+                "mitigation_strength": 0.3
+            },
+            {
+                "addresses": "concern2",
+                "details": ["point1", "point2"],
+                "addresses_risk": "technical",
+                "mitigation_strength": 0.4
+            }
+        ],
+        "implementation_factors": {
+            "technical": {"score": 0.8},
+            "resource": {"score": 0.7},
+            "timeline": {"score": 0.6},
+            "risk": {"score": 0.5}
+        }
+    }
 
-def test_metrics_initialization(metrics, metrics_config):
-    """Test metrics initialization."""
-    assert metrics.config == metrics_config
-    assert len(metrics.action_history) == 0
-    assert metrics.latest_metrics['total_actions'] == 0
-    assert metrics.latest_metrics['success_rate'] == 0.0
+@pytest.fixture
+def sample_challenge():
+    """Fixture providing sample challenge data."""
+    return {
+        "concerns": [
+            {
+                "id": "concern1",
+                "description": "Market competition",
+                "risk_type": "market",
+                "severity": 0.7
+            },
+            {
+                "id": "concern2",
+                "description": "Technical complexity",
+                "risk_type": "technical",
+                "severity": 0.6
+            },
+            {
+                "id": "concern3",
+                "description": "Resource requirements",
+                "risk_type": "resource",
+                "severity": 0.5
+            }
+        ]
+    }
 
-def test_log_action(metrics):
-    """Test logging actions."""
-    start_time = datetime.now()
-    metrics.log_action(
-        action_name="test_action",
-        start_time=start_time,
-        status="success",
-        duration=1.0
+@pytest.fixture
+def sample_evidence():
+    """Fixture providing sample evidence data."""
+    return {
+        "type": "market_research",
+        "source": "Industry Report 2023",
+        "timestamp": datetime.now() - timedelta(days=15),
+        "content": {
+            "market_size": 1000,
+            "growth_rate": 15,
+            "competition_analysis": "Strong",
+            "market_trends": ["trend1", "trend2"]
+        },
+        "confidence": 0.9,
+        "verified_source": True,
+        "peer_reviewed": True,
+        "multiple_sources": True,
+        "data_validated": False
+    }
+
+def test_consensus_metrics_calculation(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_analysis: Dict[str, Any],
+    sample_challenge: Dict[str, Any],
+    sample_evidence: Dict[str, Any]
+):
+    """Test consensus metrics calculation."""
+    metrics = metrics_analyzer.calculate_consensus_metrics(
+        sample_analysis,
+        sample_challenge,
+        [sample_evidence]
     )
     
-    history = metrics.action_history
-    assert len(history) == 1
-    assert history[0]['action'] == "test_action"
-    assert history[0]['status'] == "success"
-    assert history[0]['duration'] == 1.0
-    assert history[0]['timestamp'] == start_time
-
-def test_history_size_limit(metrics):
-    """Test action history size limitation."""
-    # Add more actions than history_size
-    for i in range(6):
-        metrics.log_action(
-            action_name=f"action{i}",
-            status="success"
-        )
+    assert isinstance(metrics, ConsensusMetric)
+    assert 0 <= metrics.agreement_score <= 1
+    assert 0 <= metrics.resolution_quality <= 1
+    assert 0 <= metrics.point_coverage <= 1
+    assert 0 <= metrics.evidence_strength <= 1
+    assert 0 <= metrics.implementation_feasibility <= 1
     
-    history = metrics.action_history
-    assert len(history) == 5  # Limited by history_size
-    # Verify we kept most recent actions
-    assert [h['action'] for h in history] == [
-        "action5", "action4", "action3", "action2", "action1"
-    ]
+    # Verify risk assessment
+    assert "technical" in metrics.risk_assessment
+    assert "market" in metrics.risk_assessment
+    assert all(0 <= score <= 1 for score in metrics.risk_assessment.values())
 
-def test_performance_metrics_calculation(metrics):
-    """Test performance metrics calculation."""
-    # Add mix of successful and failed actions
-    metrics.log_action("action1", status="success", duration=1.0)
-    metrics.log_action("action2", status="failed", duration=2.0)
-    metrics.log_action("action3", status="success", duration=3.0)
+def test_evidence_metrics_calculation(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_evidence: Dict[str, Any]
+):
+    """Test evidence metrics calculation."""
+    metrics = metrics_analyzer.calculate_evidence_metrics(sample_evidence)
     
-    performance = metrics.analyze_performance()
-    assert performance['total_actions'] == 3
-    assert performance['successful_actions'] == 2
-    assert performance['failed_actions'] == 1
-    assert performance['success_rate'] == 2/3
-    assert performance['error_rate'] == 1/3
-    assert performance['total_duration'] == 6.0
-    assert performance['average_response_time'] == 2.0
-
-def test_performance_threshold_warning(metrics):
-    """Test performance threshold warning."""
-    # Add mostly failed actions
-    metrics.log_action("action1", status="failed", duration=1.0)
-    metrics.log_action("action2", status="failed", duration=1.0)
-    metrics.log_action("action3", status="success", duration=1.0)
+    assert isinstance(metrics, EvidenceMetric)
+    assert 0 <= metrics.source_reliability <= 1
+    assert 0 <= metrics.data_freshness <= 1
+    assert 0 <= metrics.relevance_score <= 1
+    assert 0 <= metrics.verification_level <= 1
+    assert 0 <= metrics.confidence_score <= 1
     
-    performance = metrics.analyze_performance()
-    assert 'warning' in performance
-    assert performance['success_rate'] < metrics.config.performance_threshold
-    assert "below threshold" in performance['warning']
+    # Test data freshness calculation
+    old_evidence = sample_evidence.copy()
+    old_evidence["timestamp"] = datetime.now() - timedelta(days=400)
+    old_metrics = metrics_analyzer.calculate_evidence_metrics(old_evidence)
+    assert old_metrics.data_freshness < metrics.data_freshness
 
-def test_clear_history(metrics):
-    """Test clearing metrics history."""
-    metrics.log_action("action1", status="success")
-    assert len(metrics.action_history) == 1
+def test_performance_metrics_recording(metrics_analyzer: MetricsAnalyzer):
+    """Test performance metrics recording."""
+    start_time = datetime.now() - timedelta(seconds=2)
+    end_time = datetime.now()
     
-    metrics.clear_history()
-    assert len(metrics.action_history) == 0
-    assert metrics.latest_metrics['total_actions'] == 0
-    assert metrics.latest_metrics['success_rate'] == 0.0
-
-def test_error_logging(metrics):
-    """Test logging actions with errors."""
-    metrics.log_action(
-        action_name="failed_action",
-        status="failed",
-        error="Test error message"
+    metrics = metrics_analyzer.record_performance_metrics(
+        start_time,
+        end_time,
+        memory_mb=100.0,
+        cpu_percent=50.0
     )
     
-    history = metrics.action_history
-    assert history[0]['status'] == "failed"
-    assert history[0]['error'] == "Test error message"
+    assert isinstance(metrics, PerformanceMetric)
+    assert metrics.response_time >= 2.0
+    assert metrics.memory_usage == 100.0
+    assert metrics.cpu_usage == 50.0
     
-    performance = metrics.analyze_performance()
-    assert performance['error_rate'] == 1.0
-    assert performance['success_rate'] == 0.0
+    # Verify metrics were recorded
+    assert len(metrics_analyzer.metrics_history[MetricType.PERFORMANCE]) > 0
 
-def test_metrics_timestamps(metrics):
-    """Test metrics timestamp handling."""
-    # Add action without start_time
-    metrics.log_action("action1", status="success")
-    history = metrics.action_history
-    assert 'timestamp' in history[0]
-    assert isinstance(history[0]['timestamp'], datetime)
-    
-    # Add action with start_time
-    start_time = datetime.now() - timedelta(minutes=1)
-    metrics.log_action(
-        "action2",
-        start_time=start_time,
-        status="success"
+def test_metrics_summary(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_analysis: Dict[str, Any],
+    sample_challenge: Dict[str, Any],
+    sample_evidence: Dict[str, Any]
+):
+    """Test metrics summary generation."""
+    # Record some metrics
+    metrics_analyzer.calculate_consensus_metrics(
+        sample_analysis,
+        sample_challenge,
+        [sample_evidence]
     )
-    assert metrics.action_history[0]['timestamp'] == start_time
+    
+    metrics_analyzer.record_performance_metrics(
+        datetime.now() - timedelta(seconds=1),
+        datetime.now(),
+        memory_mb=100.0,
+        cpu_percent=50.0
+    )
+    
+    summary = metrics_analyzer.get_metrics_summary()
+    
+    # Verify summary structure
+    assert "consensus" in summary
+    assert "performance" in summary
+    
+    # Verify consensus metrics
+    consensus = summary["consensus"]
+    assert "average_agreement" in consensus
+    assert "average_quality" in consensus
+    assert "average_evidence" in consensus
+    
+    # Verify performance metrics
+    performance = summary["performance"]
+    assert "average_response_time" in performance
+    assert "average_memory" in performance
+    assert "average_cpu" in performance
 
-def test_metrics_config_defaults():
-    """Test metrics configuration defaults."""
-    metrics = AgentMetrics()  # No config provided
-    assert metrics.config.enabled is True
-    assert metrics.config.history_size == 1000
-    assert metrics.config.aggregation_interval == 60
-    assert metrics.config.performance_threshold == 0.8
+def test_addressed_points_counting(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_analysis: Dict[str, Any],
+    sample_challenge: Dict[str, Any]
+):
+    """Test counting of addressed points."""
+    count = metrics_analyzer._count_addressed_points(
+        sample_analysis,
+        sample_challenge
+    )
+    
+    # Should have addressed 2 out of 3 concerns
+    assert count == 2
 
-def test_latest_metrics_copy(metrics):
-    """Test latest_metrics returns a copy."""
-    original = metrics.latest_metrics
-    original['test'] = 'value'
-    assert 'test' not in metrics.latest_metrics
+def test_resolution_quality_calculation(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_analysis: Dict[str, Any],
+    sample_challenge: Dict[str, Any]
+):
+    """Test resolution quality calculation."""
+    quality = metrics_analyzer._calculate_resolution_quality(
+        sample_analysis["response_points"],
+        sample_challenge["concerns"]
+    )
+    
+    assert 0 <= quality <= 1
+    # First response has 3 details, second has 2, average should be 0.83
+    assert 0.8 <= quality <= 0.9
 
-def test_action_history_copy(metrics):
-    """Test action_history returns a copy."""
-    metrics.log_action("action1", status="success")
-    original = metrics.action_history
-    original.append({'fake': 'action'})
-    assert len(metrics.action_history) == 1
+def test_implementation_feasibility(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_analysis: Dict[str, Any]
+):
+    """Test implementation feasibility calculation."""
+    feasibility = metrics_analyzer._calculate_implementation_feasibility(
+        sample_analysis
+    )
+    
+    assert 0 <= feasibility <= 1
+    # Based on the sample data, should be around 0.65
+    assert 0.6 <= feasibility <= 0.7
+
+def test_risk_assessment(
+    metrics_analyzer: MetricsAnalyzer,
+    sample_analysis: Dict[str, Any],
+    sample_challenge: Dict[str, Any]
+):
+    """Test risk assessment calculation."""
+    risks = metrics_analyzer._assess_risks(
+        sample_analysis,
+        sample_challenge
+    )
+    
+    assert all(0 <= score <= 1 for score in risks.values())
+    assert "market" in risks
+    assert "technical" in risks
+    assert "resource" in risks
+    
+    # Market risk should be reduced by mitigation
+    assert risks["market"] == 0.4  # 0.7 - 0.3
+    # Technical risk should be reduced by mitigation
+    assert risks["technical"] == 0.2  # 0.6 - 0.4

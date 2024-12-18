@@ -1,16 +1,22 @@
-# src/agents/__init__.py
-from .base import BaseAgent
-from .types import AgentRole, AgentType
-from .models import AgentConfig, AgentState
-from .exceptions import AgentError, ConfigurationError, ExecutionError
+"""Agent package initialization.
+
+This package contains agent implementations and related functionality.
+"""
+
+from .strategy_analyst import StrategyAnalyst
+from .strategy_skeptic import MarketSkeptic
+from .adapters import (
+    StrategyAnalystAdapter,
+    MarketSkepticAdapter,
+    DebateSessionManager
+)
+from .orchestrator import DebateOrchestrator
 
 __all__ = [
-    'BaseAgent',
-    'AgentRole',
-    'AgentType',
-    'AgentConfig',
-    'AgentState',
-    'AgentError',
-    'ConfigurationError',
-    'ExecutionError'
+    'StrategyAnalyst',
+    'MarketSkeptic',
+    'StrategyAnalystAdapter',
+    'MarketSkepticAdapter',
+    'DebateSessionManager',
+    'DebateOrchestrator'
 ]

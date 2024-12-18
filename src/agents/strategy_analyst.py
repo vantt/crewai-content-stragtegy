@@ -100,13 +100,50 @@ class StrategyAnalyst(StrategyAgent):
         Returns:
             TargetAudience model
         """
-        # Generate target audience data directly from market data
+        # Extract demographics from nested context if available
+        demographics = (
+            market_data.get("context", {}).get("demographics")
+            if "context" in market_data
+            else market_data.get("demographics", {})
+        )
+        
+        if not demographics:
+            demographics = {
+                "company_size": ["Small", "Medium"],
+                "industry_sectors": ["Technology"],
+                "geographic_regions": ["Global"],
+                "decision_makers": ["CTO", "IT Manager"],
+                "budget_range": {
+                    "min": 10000,
+                    "max": 100000,
+                    "currency": "USD"
+                }
+            }
+        
+        # Generate target audience data
         result = {
-            "segments": [{"type": "primary", "description": "test"}],
-            "pain_points": ["test pain point"],
-            "goals": ["test goal"],
-            "demographics": market_data["demographics"],  # Use demographics directly from market data
-            "behavioral_traits": ["test trait"]
+            "segments": [
+                {
+                    "type": "primary",
+                    "description": f"Companies in {', '.join(demographics['industry_sectors'])} sector"
+                }
+            ],
+            "pain_points": [
+                "Integration complexity",
+                "Data processing speed",
+                "Cost optimization"
+            ],
+            "goals": [
+                "Improve efficiency",
+                "Reduce costs",
+                "Scale operations"
+            ],
+            "demographics": demographics,
+            "behavioral_traits": [
+                "Technology-driven",
+                "Innovation-focused",
+                "Growth-oriented"
+            ]
         }
         return TargetAudience(**result)
     
