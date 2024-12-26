@@ -1,49 +1,36 @@
-"""UI components package.
-
-This package contains Streamlit UI components and utilities.
-"""
-
+"""UI components initialization."""
 from .components import (
     EventStreamComponent,
     StateViewComponent,
-    ControlPanelComponent,
-    DebateViewComponent
+    ControlPanelComponent
 )
-
 from .workflow import (
     WorkflowVisualizerComponent,
     ResourceMonitorComponent
 )
-
 from .debate import (
+    DebateViewComponent,
     DebateVisualizerComponent
 )
-
 from .metrics import (
     MetricsVisualizerComponent
 )
-
 from .recovery import (
     RecoveryVisualizerComponent
 )
+from .chat_history import (
+    ChatHistoryComponent
+)
 
 __all__ = [
-    # Core components
     'EventStreamComponent',
     'StateViewComponent',
     'ControlPanelComponent',
-    'DebateViewComponent',
-    
-    # Workflow components
     'WorkflowVisualizerComponent',
     'ResourceMonitorComponent',
-    
-    # Debate visualization
+    'DebateViewComponent',
     'DebateVisualizerComponent',
-    
-    # Metrics visualization
     'MetricsVisualizerComponent',
-    
-    # Recovery visualization
-    'RecoveryVisualizerComponent'
+    'RecoveryVisualizerComponent',
+    'ChatHistoryComponent'
 ]
